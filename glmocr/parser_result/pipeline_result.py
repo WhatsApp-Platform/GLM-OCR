@@ -50,7 +50,7 @@ class PipelineResult(BaseParserResult):
 
     def save(
         self,
-        output_dir: Union[str, Path] = "./results",
+        output_dir: Union[str, Path] = "./output",
         save_layout_visualization: bool = True,
     ) -> None:
         """Save JSON, Markdown, and optionally layout visualization."""

@@ -59,7 +59,7 @@ class BaseParserResult(ABC):
     @abstractmethod
     def save(
         self,
-        output_dir: Union[str, Path] = "./results",
+        output_dir: Union[str, Path] = "./output",
         save_layout_visualization: bool = True,
     ) -> None:
         """Save result to disk. Subclasses implement layout vis etc."""

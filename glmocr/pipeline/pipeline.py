@@ -58,7 +58,7 @@ class Pipeline:
         cfg = load_config()
         pipeline = Pipeline(cfg.pipeline)
         for result in pipeline.process(request_data):
-            result.save(output_dir="./results")
+            result.save(output_dir="./output")
     """
 
     def __init__(
