@@ -178,9 +178,10 @@ class ResultFormatter(BasePostProcessor):
                     )
 
                     # Skip empty or failed content (after formatting)
-                    content = result.get("content")
-                    if content is None or (isinstance(content, str) and content.strip() == ""):
-                        continue
+                    if result["label"] != "image":
+                        content = result.get("content")
+                        if content is None or (isinstance(content, str) and content.strip() == ""):
+                            continue
 
                     # Update index
                     result["index"] = valid_idx
