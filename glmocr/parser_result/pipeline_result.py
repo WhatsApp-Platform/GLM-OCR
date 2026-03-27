@@ -74,11 +74,7 @@ class PipelineResult(BaseParserResult):
         )
         single = len(self.layout_vis_images) == 1
         for page_idx, vis_img in self.layout_vis_images.items():
-            name = (
-                f"{stem_name}.jpg"
-                if single
-                else f"{stem_name}_page{page_idx}.jpg"
-            )
+            name = f"{stem_name}.jpg" if single else f"{stem_name}_page{page_idx}.jpg"
             try:
                 vis_img.save(target_dir / name, quality=95)
             except Exception as e:

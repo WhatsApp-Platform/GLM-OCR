@@ -227,7 +227,7 @@ def main():
         metavar=("KEY", "VALUE"),
         dest="config_overrides",
         help="Override a config value using dotted path, e.g. "
-             "--set pipeline.ocr_api.api_port 8080",
+        "--set pipeline.ocr_api.api_port 8080",
     )
 
     args = parser.parse_args()
@@ -246,7 +246,7 @@ def main():
         save_layout_vis = not args.no_layout_vis
 
         dotted_overrides: dict = {}
-        for key, value in (args.config_overrides or []):
+        for key, value in args.config_overrides or []:
             dotted_overrides[key] = _auto_coerce(value)
 
         with GlmOcr(
