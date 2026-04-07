@@ -24,6 +24,20 @@ class TestConfig:
         cfg = load_config().to_dict()
         assert isinstance(cfg, dict)
 
+    def test_selfhosted_layout_defaults_are_publicly_configured(self):
+        """Self-hosted config loads packaged layout defaults."""
+        from glmocr.config import load_config
+
+        cfg = load_config(mode="selfhosted")
+        layout = cfg.pipeline.layout
+
+        assert cfg.pipeline.maas.enabled is False
+        assert layout.model_dir == "PaddlePaddle/PP-DocLayoutV3_safetensors"
+        assert isinstance(layout.label_task_mapping, dict)
+        assert layout.label_task_mapping
+        assert isinstance(layout.id2label, dict)
+        assert layout.id2label
+
 
 class TestLayoutDeviceUnit:
     """Unit tests for layout device selection and config plumbing (mocked)."""
@@ -36,6 +50,10 @@ class TestLayoutDeviceUnit:
         )
         pytest.importorskip(
             "transformers",
+            reason="layout device unit tests require optional selfhosted deps",
+        )
+        pytest.importorskip(
+            "cv2",
             reason="layout device unit tests require optional selfhosted deps",
         )
         return torch
@@ -94,18 +112,19 @@ class TestLayoutDeviceUnit:
 
     # Minimal config kwargs for mocked detector tests
     _MOCK_LAYOUT_KWARGS = dict(
-        model_dir="dummy",
         id2label={0: "text"},
         label_task_mapping={"text": ["text"]},
     )
 
-    def _mock_detector(self, device_val):
+    def _mock_detector(self, device_val, *, model_dir="dummy"):
         """Create a PPDocLayoutDetector with mocked model, ready for start()."""
         self._require_layout_runtime()
         from glmocr.config import LayoutConfig
         from glmocr.layout.layout_detector import PPDocLayoutDetector
 
-        cfg = LayoutConfig(device=device_val, **self._MOCK_LAYOUT_KWARGS)
+        cfg = LayoutConfig(
+            device=device_val, model_dir=model_dir, **self._MOCK_LAYOUT_KWARGS
+        )
         det = PPDocLayoutDetector(cfg)
 
         mock_model = MagicMock()
@@ -126,7 +145,7 @@ class TestLayoutDeviceUnit:
                 return_value=mock_model,
             ),
             patch(
-                "glmocr.layout.layout_detector.PPDocLayoutV3ImageProcessorFast.from_pretrained",
+                "glmocr.layout.layout_detector.PPDocLayoutV3ImageProcessor.from_pretrained",
                 return_value=mock_proc,
             ),
         ):
@@ -145,7 +164,7 @@ class TestLayoutDeviceUnit:
                 return_value=mock_model,
             ),
             patch(
-                "glmocr.layout.layout_detector.PPDocLayoutV3ImageProcessorFast.from_pretrained",
+                "glmocr.layout.layout_detector.PPDocLayoutV3ImageProcessor.from_pretrained",
                 return_value=mock_proc,
             ),
         ):
@@ -166,7 +185,7 @@ class TestLayoutDeviceUnit:
                 return_value=mock_model,
             ),
             patch(
-                "glmocr.layout.layout_detector.PPDocLayoutV3ImageProcessorFast.from_pretrained",
+                "glmocr.layout.layout_detector.PPDocLayoutV3ImageProcessor.from_pretrained",
                 return_value=mock_proc,
             ),
             patch.object(torch.cuda, "is_available", return_value=False),
@@ -182,7 +201,10 @@ class TestLayoutDeviceUnit:
         from glmocr.layout.layout_detector import PPDocLayoutDetector
 
         cfg = LayoutConfig(
-            device=None, cuda_visible_devices="1", **self._MOCK_LAYOUT_KWARGS
+            device=None,
+            cuda_visible_devices="1",
+            model_dir="dummy",
+            **self._MOCK_LAYOUT_KWARGS,
         )
         det = PPDocLayoutDetector(cfg)
 
@@ -199,7 +221,7 @@ class TestLayoutDeviceUnit:
                 return_value=mock_model,
             ),
             patch(
-                "glmocr.layout.layout_detector.PPDocLayoutV3ImageProcessorFast.from_pretrained",
+                "glmocr.layout.layout_detector.PPDocLayoutV3ImageProcessor.from_pretrained",
                 return_value=mock_proc,
             ),
             patch.object(torch.cuda, "is_available", return_value=True),
@@ -207,6 +229,37 @@ class TestLayoutDeviceUnit:
             det.start()
 
         assert det._device == "cuda:1"
+
+    def test_detector_start_uses_public_config_defaults(self):
+        """Detector can start from load_config() defaults without extra fields."""
+        self._require_layout_runtime()
+        from glmocr.config import load_config
+        from glmocr.layout.layout_detector import PPDocLayoutDetector
+
+        cfg = load_config(mode="selfhosted").pipeline.layout
+        cfg.model_dir = "dummy"
+        det = PPDocLayoutDetector(cfg)
+
+        mock_model = MagicMock()
+        mock_model.to = MagicMock(return_value=mock_model)
+        mock_model.eval = MagicMock()
+        mock_model.config = MagicMock()
+        mock_model.config.id2label = dict(cfg.id2label)
+        mock_proc = MagicMock()
+
+        with (
+            patch(
+                "glmocr.layout.layout_detector.PPDocLayoutV3ForObjectDetection.from_pretrained",
+                return_value=mock_model,
+            ),
+            patch(
+                "glmocr.layout.layout_detector.PPDocLayoutV3ImageProcessor.from_pretrained",
+                return_value=mock_proc,
+            ),
+        ):
+            det.start()
+
+        assert det.id2label == cfg.id2label
 
 
 class TestPageLoader:
@@ -1725,7 +1778,6 @@ class TestOCRClientConnectOllama:
         client = OCRClient(config)
         client.connect()
 
-        # Inspect the payload sent
         call_kwargs = mock_post.call_args
         sent_data = json.loads(call_kwargs.kwargs.get("data") or call_kwargs[1]["data"])
         assert sent_data["model"] == "glm-ocr:latest"

@@ -10,7 +10,7 @@ import numpy as np
 from PIL import Image
 from transformers import (
     PPDocLayoutV3ForObjectDetection,
-    PPDocLayoutV3ImageProcessorFast,
+    PPDocLayoutV3ImageProcessor,
 )
 
 from glmocr.layout.base import BaseLayoutDetector
@@ -50,17 +50,32 @@ class PPDocLayoutDetector(BaseLayoutDetector):
         self.batch_size = config.batch_size
 
         self.label_task_mapping = config.label_task_mapping
-        self.id2label = config.id2label
+        self.id2label = getattr(config, "id2label", None)
 
         self._model = None
         self._image_processor = None
         self._device = None
 
+    def _validate_runtime_config(self):
+        """Validate layout config before model loading or post-processing."""
+        if not self.model_dir:
+            raise ValueError(
+                "pipeline.layout.model_dir is required for self-hosted layout "
+                "detection. Set it to a local checkpoint directory or a Hugging "
+                "Face model id such as 'PaddlePaddle/PP-DocLayoutV3_safetensors'."
+            )
+        if not isinstance(self.label_task_mapping, dict) or not self.label_task_mapping:
+            raise ValueError(
+                "pipeline.layout.label_task_mapping must be a non-empty mapping "
+                "when layout detection is enabled."
+            )
+
     def start(self):
         """Load model and processor once in the main process."""
         logger.debug("Initializing PP-DocLayoutV3...")
+        self._validate_runtime_config()
 
-        self._image_processor = PPDocLayoutV3ImageProcessorFast.from_pretrained(
+        self._image_processor = PPDocLayoutV3ImageProcessor.from_pretrained(
             self.model_dir
         )
         self._model = PPDocLayoutV3ForObjectDetection.from_pretrained(self.model_dir)
@@ -282,6 +297,7 @@ class PPDocLayoutDetector(BaseLayoutDetector):
         """
         if self._model is None:
             raise RuntimeError("Layout detector not started. Call start() first.")
+        self._validate_runtime_config()
 
         num_images = len(images)
         pil_images = [
