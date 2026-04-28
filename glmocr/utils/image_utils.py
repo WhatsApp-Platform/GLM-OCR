@@ -1,7 +1,7 @@
 """Image processing utilities."""
 
 import io
-import fitz
+import pypdfium2 as pdfium
 import math
 import base64
 from io import BytesIO
@@ -255,15 +255,15 @@ def image_tensor_to_base64(image_tensor, image_format):
 
 
 # -----------------------------------------------------------------------------
-# PDF rendering via PyMuPDF (fitz)
+# PDF rendering via pypdfium2
 # -----------------------------------------------------------------------------
 
 
 def _render_page_to_pil(page, dpi: int = 200, max_width_or_height: int = 3500):
-    """Render a PDF page to PIL Image via PyMuPDF.
+    """Render a PDF page to PIL Image via pypdfium2.
 
     Args:
-        page: fitz.Page object.
+        page: pdfium.PdfPage object.
         dpi: Render DPI.
         max_width_or_height: Cap on the longer side in pixels.
 
@@ -271,21 +271,19 @@ def _render_page_to_pil(page, dpi: int = 200, max_width_or_height: int = 3500):
         (PIL.Image, scale_factor)
     """
     scale = dpi / 72.0
-    rect = page.rect
-    long_side_pt = max(rect.width, rect.height)
+    long_side_pt = max(page.get_width(), page.get_height())
     if long_side_pt * scale > max_width_or_height:
         scale = max_width_or_height / long_side_pt
-    mat = fitz.Matrix(scale, scale)
-    pix = page.get_pixmap(matrix=mat, alpha=False)
-    image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    bitmap = page.render(scale=scale)
+    image = bitmap.to_pil()
+    if image.mode != "RGB":
+        image = image.convert("RGB")
     return image, scale
 
 
 def _open_pdf(source):
     """Open a PDF from a file path (str) or raw bytes."""
-    if isinstance(source, bytes):
-        return fitz.open(stream=source, filetype="pdf")
-    return fitz.open(source)
+    return pdfium.PdfDocument(source)
 
 
 def pdf_to_images_pil(
@@ -310,14 +308,14 @@ def pdf_to_images_pil(
     doc = None
     try:
         doc = _open_pdf(source)
-        page_count = doc.page_count
+        page_count = len(doc)
         if end_page_id is None or end_page_id < 0:
             end_page_id = page_count - 1
         if end_page_id >= page_count:
             end_page_id = page_count - 1
         images = []
         for i in range(start_page_id, end_page_id + 1):
-            page = doc.load_page(i)
+            page = doc[i]
             image, _ = _render_page_to_pil(
                 page, dpi=dpi, max_width_or_height=max_width_or_height
             )
@@ -354,14 +352,14 @@ def pdf_to_images_pil_iter(
     label = source if isinstance(source, str) else "<bytes>"
     try:
         doc = _open_pdf(source)
-        page_count = doc.page_count
+        page_count = len(doc)
         if end_page_id is None or end_page_id < 0:
             end_page_id = page_count - 1
         if end_page_id >= page_count:
             end_page_id = page_count - 1
         for i in range(start_page_id, end_page_id + 1):
             try:
-                page = doc.load_page(i)
+                page = doc[i]
             except Exception as e:
                 logger.warning("Skipping page %d of '%s': %s", i, label, e)
                 continue

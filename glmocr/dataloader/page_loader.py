@@ -180,6 +180,9 @@ class PageLoader:
 
         if os.path.isfile(file_path) and file_path.lower().endswith(".pdf"):
             yield from self._iter_pdf(file_path)
+        elif source.startswith("data:application/pdf"):
+            _, b64 = source.split(",", 1)
+            yield from self._iter_pdf_bytes(base64.b64decode(b64))
         else:
             yield self._load_image(source)
 
@@ -254,6 +257,10 @@ class PageLoader:
         # Detect PDF
         if os.path.isfile(file_path) and file_path.lower().endswith(".pdf"):
             return self._load_pdf(file_path)
+
+        if source.startswith("data:application/pdf"):
+            _, b64 = source.split(",", 1)
+            return self._load_pdf_bytes(base64.b64decode(b64))
 
         # Otherwise load as a single image page
         return [self._load_image(source)]
